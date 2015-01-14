@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <Time.h>
 #include <glcd.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include <fonts/SystemFont5x7.h>
 #include <fonts/fixednums15x31.h>
 #include <fonts/fixednums8x16.h>
@@ -9,6 +11,7 @@
 #include "ShakerUtils.h"
 #include "SimpleTimer.h"
 
+
 Rotater enc(2, 3); 
 Button btn1(19);
 Button btn2(20);
@@ -16,6 +19,8 @@ Relay heater(23);
 Relay pump(22);
 Magnet magnet(25);
 Motor motor(24);
+OneWire oneWire(26);
+DallasTemperature therm(&oneWire);
 
 FPSCounter fps;
 SimpleTimer timer;
@@ -45,6 +50,7 @@ void setup() {
   attachInterrupt(1, encoderInterrupt, CHANGE);
   
   GLCD.Init();
+  therm.begin();
   
   setTime(22, 51, 30, 24, 11, 14);
   
@@ -341,6 +347,10 @@ void preheat() {
 }
 
 void cook() {
+  therm.requestTemperatures();
+  float temperature = therm.getTempCByIndex(0);
+  Serial.println(temperature);
+  
   unsigned int time = countTimeForPrep();
   prepTimerNum = timer.setTimeout(time, doNothing);
   

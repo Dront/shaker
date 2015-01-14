@@ -16,12 +16,13 @@
 Rotater enc(2, 3); 
 Button btn1(19);
 Button btn2(20);
-Relay heater(23);
 Relay pump(22);
-Magnet magnet(25);
+Relay heater(23);
 Motor motor(24);
+Magnet magnet(25);
 OneWire oneWire(26);
 
+#define MAGNET_CHECK_DELAY 50
 #define MAX_WATER_TEMP 30
 #define MIN_WATER_TEMP 10
 DallasTemperature therm(&oneWire);
@@ -51,7 +52,7 @@ uint8_t clearScreen = false;
 
 //for setting time and expire date
 time_t tmp_time;
-DayCounter tmp_day;
+DayCounter tmp_day(5);
 
 void setup() {
   unsigned long curTime = millis();
@@ -342,36 +343,35 @@ void toggleHeater() {
 }
 
 void motorWork() {
-  motor.disable();
-  
-  unsigned int time = (portions.getCount() - 1) * TIME_FOR_PORTION;
-  timer.setTimeout(time, toDoneScreen);
-  pump.enable();
-  
-  time = TIME_FOR_HEATER;
-  uint8_t num = (portions.getCount() - 1) * 2;
-  uint8_t timerNum = timer.setTimer(time, toggleHeater, num);
-  heater.setTimerNum(timerNum);
-  heater.enable();
+  if (magnet.getCount() == portions.getCount() + 2) {
+    timer.deleteTimer(magnet.getTimerNum()); 
+    motor.disable();
+    
+    unsigned int time = (portions.getCount() - 1) * TIME_FOR_PORTION;
+    timer.setTimeout(time, toDoneScreen);
+    pump.enable();
+    
+    time = TIME_FOR_HEATER;
+    uint8_t num = (portions.getCount() - 1) * 2;
+    uint8_t timerNum = timer.setTimer(time, toggleHeater, num);
+    heater.setTimerNum(timerNum);
+    heater.enable();
+  }
 }
 
 void fillFirstPortion() {
   pump.disable();
+  //unsigned int time = TIME_FOR_MOTOR * portions.getCount();
+  //timer.setTimeout(time, motorWork);
   
-  unsigned int time = TIME_FOR_MOTOR * portions.getCount();
-  timer.setTimeout(time, motorWork);
+  uint8_t timerNum = timer.setInterval(MAGNET_CHECK_DELAY, motorWork);
+  magnet.setTimerNum(timerNum);
+  magnet.zeroCount();
   motor.enable();
 }
 
 void heatFirstPortion() {
   heater.disable();
-}
-
-unsigned int countTimeForPrep() {
-  unsigned int timeForHeater = TIME_FOR_HEATER;
-  unsigned int timeForWater = TIME_FOR_PORTION * portions.getCount();
-  unsigned int timeForMotor = TIME_FOR_MOTOR * portions.getCount();
-  return timeForHeater + timeForWater + timeForMotor;
 }
 
 void doNothing(){}
@@ -386,6 +386,13 @@ void preheat() {
   time = TIME_FOR_PORTION;
   timer.setTimeout(time, fillFirstPortion); 
   pump.enable();
+}
+
+unsigned int countTimeForPrep() {
+  unsigned int timeForHeater = TIME_FOR_HEATER;
+  unsigned int timeForWater = TIME_FOR_PORTION * portions.getCount();
+  unsigned int timeForMotor = TIME_FOR_MOTOR * portions.getCount();
+  return timeForHeater + timeForWater + timeForMotor;
 }
 
 void cook() {
@@ -435,7 +442,8 @@ void processButton(const uint8_t btnNumber) {
 }
 
 void showTime() {
-  GLCD.CursorTo(2, 1);
+  GLCD.GotoXY(25, 16);
+  //GLCD.CursorTo(2, 0);
   uint8_t h = hour();
   if (h < 10) {
     GLCD.print(0);
@@ -485,7 +493,7 @@ void showPreparing() {
   GLCD.CursorTo(3, 1);
   GLCD.print("Processing...");
   unsigned long remainingTime = timer.getRemainingTime(prepTimerNum) / 1000;
-  GLCD.CursorTo(2, 2);
+  GLCD.CursorTo(0, 2);
   GLCD.print("remaining time: ");
   if (remainingTime < 10) {
     GLCD.print(0);
@@ -513,7 +521,7 @@ void showInfo() {
 }
 
 void showDays() {
-  GLCD.CursorTo(2, 1);
+  GLCD.CursorTo(1, 1);
   uint8_t d = days.getCount();
   GLCD.print("Expire in ");
   GLCD.print(d);
@@ -526,7 +534,7 @@ void showSetDays() {
   
   uint8_t d = tmp_day.getCount();
   GLCD.CursorTo(2, 1);
-  GLCD.print("Choose days count: ");
+  GLCD.print("Days count: ");
   GLCD.CursorTo(6, 2);
   
   if ((millis() / 500) % 2) {
@@ -548,7 +556,7 @@ void showLastPrep() {
   uint16_t mins = diff - hours * 3600;
   uint8_t sec = mins % 60;
   mins /= 60;
-  GLCD.CursorTo(5, 2);
+  GLCD.CursorTo(3, 2);
   
   if (hours < 10) {
     GLCD.print(0);
@@ -569,13 +577,13 @@ void showLastPrep() {
 }
 
 void showSetTime1() {
-  GLCD.CursorTo(4, 1);
-  
+  //GLCD.CursorTo(4, 1);
+  GLCD.GotoXY(25, 16);
   static bool clear = false;
   
   unsigned int h = hour(tmp_time);
   if ((millis() / 500) % 2) {
-    GLCD.print("        ");
+    //GLCD.SetFontColor(WHITE);
     if (h < 10) {
       GLCD.print(0);
     }
@@ -586,10 +594,12 @@ void showSetTime1() {
       GLCD.ClearScreen();
       clear = false;
     }
+    GLCD.print("   ");
   }
   
   unsigned int m = minute(tmp_time);
-  GLCD.CursorTo(6, 1);
+  //GLCD.CursorTo(6, 1);
+  GLCD.GotoXY(56, 16);
   GLCD.print(":");
   if (m < 10) {
     GLCD.print(0);
@@ -598,12 +608,13 @@ void showSetTime1() {
 }
 
 void showSetTime2() {
-  GLCD.CursorTo(4, 1);
+  //GLCD.CursorTo(4, 1);
+  GLCD.GotoXY(25, 16);
   
   static bool clear = false;
   
   unsigned int h = hour(tmp_time);
-  GLCD.print("        ");
+  //GLCD.print("        ");
   if (h < 10) {
     GLCD.print(0);
   }
@@ -625,6 +636,7 @@ void showSetTime2() {
 
 void loop() {
   timer.run();
+  magnet.update();
   
   unsigned long currentTime = millis();
   if (currentTime - previousLoopTime < LOOP_TIME) {
@@ -655,10 +667,12 @@ void loop() {
       break;
       
     case SET_TIME_1:
+      GLCD.SelectFont(fixednums15x31);
       showSetTime1();
       break;
     
     case SET_TIME_2:
+      GLCD.SelectFont(fixednums15x31);
       showSetTime2();
       break;
     

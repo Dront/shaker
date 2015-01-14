@@ -352,17 +352,48 @@ public:
 //*******************************************************************************
 class Magnet {
   
+#define MAGNET_DELAY 300
+  
   private:
     uint8_t pin;
+    unsigned long prevTick;
+    unsigned tickCount;
+    uint8_t timerNum;
     
   public:
     Magnet (const uint8_t p) {
     	pin = p;
     	pinMode(pin, INPUT);
+        prevTick = 0;
+        tickCount = 0;
     }
     
     inline bool enabled() {
     	return digitalRead(pin);
     }
+    
+    inline unsigned update() {
+        unsigned long time = millis();
+        if (digitalRead(pin) == HIGH && (time - prevTick > MAGNET_DELAY)) {
+            tickCount++;
+            prevTick = time;
+        }
+        return tickCount;
+    }
 
+    inline unsigned getCount() {
+      return tickCount;
+    }
+    
+    inline void zeroCount() {
+      tickCount = 0;
+    }
+    
+    inline void setTimerNum(const uint8_t num) {
+      timerNum = num;
+    }
+    
+    inline uint8_t getTimerNum() {
+      return timerNum;
+    }
 };

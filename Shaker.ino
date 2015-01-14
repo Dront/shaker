@@ -24,7 +24,7 @@ SystemState sysState = TIME;
 
 #define TIME_FOR_MOTOR 1000
 #define TIME_FOR_HEATER 1500
-
+#define TIME_FOR_DONE_SCREEN 2000
 #define TIME_FOR_PORTION 3000
 Portion portions(3);
 DayCounter days(5);
@@ -34,6 +34,8 @@ unsigned long prepTimer = millis();
 #define LOOP_TIME 25
 unsigned long previousLoopTime = millis();
 
+#define CLEAR_SCREEN_TIME 1000
+unsigned long clearScreenTime = millis();
 uint8_t clearScreen = false;
 
 void setup() {
@@ -142,82 +144,6 @@ void encoderInterrupt() {
     default:
       break;
   }
-}
-
-void toggleHeater() {
-  if (heater.getState() == ENABLED) {
-    heater.disable();
-  } else {
-    heater.enable();
-  }
-}
-
-void motorWork() {
-  motor.disable();
-  
-  unsigned int time = (portions.getCount() - 1) * TIME_FOR_PORTION;
-  timer.setTimeout(time, toTimeScreen);
-  pump.enable();
-  
-  time = TIME_FOR_HEATER;
-  uint8_t num = (portions.getCount() - 1) * 2;
-  uint8_t timerNum = timer.setTimer(time, toggleHeater, num);
-  heater.setTimerNum(timerNum);
-  heater.enable();
-}
-
-void fillFirstPortion() {
-  pump.disable();
-  
-  unsigned int time = TIME_FOR_MOTOR * portions.getCount();
-  timer.setTimeout(time, motorWork);
-  motor.enable();
-}
-
-void heatFirstPortion() {
-  heater.disable();
-}
-
-unsigned int countTimeForPrep() {
-  unsigned int timeForHeater = TIME_FOR_HEATER;
-  unsigned int timeForWater = TIME_FOR_PORTION * portions.getCount();
-  unsigned int timeForMotor = TIME_FOR_MOTOR * portions.getCount();
-  return timeForHeater + timeForWater + timeForMotor;
-}
-
-void doNothing(){}
-
-void preheat() {
-  heater.disable();
-  
-  unsigned int time = TIME_FOR_HEATER; 
-  timer.setTimeout(time, heatFirstPortion); 
-  heater.enable();
-  
-  time = TIME_FOR_PORTION;
-  timer.setTimeout(time, fillFirstPortion); 
-  pump.enable();
-}
-
-void cook() {
-  unsigned int time = countTimeForPrep();
-  prepTimerNum = timer.setTimeout(time, doNothing);
-  
-  time = TIME_FOR_HEATER;
-  timer.setTimeout(time, preheat); 
-  heater.enable();
-  
-  switchState(PREPARING);
-}
-
-void toTimeScreen(){
-  clearScreen = true;
-  pump.disable();
-  
-  timer.deleteTimer(heater.getTimerNum());
-  heater.disable();
-  prepTimer = millis();
-  switchState(TIME);
 }
 
 void button1Interrupt() {
@@ -340,6 +266,91 @@ void processEncoder() {
   }
 }
 
+void toTimeScreen(){
+  clearScreen = true;
+  switchState(TIME);
+}
+
+void toDoneScreen(){
+  clearScreen = true;
+  pump.disable();
+  
+  timer.deleteTimer(heater.getTimerNum());
+  heater.disable();
+  
+  prepTimer = millis();
+  
+  switchState(DONE_PREPARING);
+  unsigned int time = TIME_FOR_DONE_SCREEN;
+  timer.setTimeout(time, toTimeScreen);
+}
+
+void toggleHeater() {
+  if (heater.getState() == ENABLED) {
+    heater.disable();
+  } else {
+    heater.enable();
+  }
+}
+
+void motorWork() {
+  motor.disable();
+  
+  unsigned int time = (portions.getCount() - 1) * TIME_FOR_PORTION;
+  timer.setTimeout(time, toDoneScreen);
+  pump.enable();
+  
+  time = TIME_FOR_HEATER;
+  uint8_t num = (portions.getCount() - 1) * 2;
+  uint8_t timerNum = timer.setTimer(time, toggleHeater, num);
+  heater.setTimerNum(timerNum);
+  heater.enable();
+}
+
+void fillFirstPortion() {
+  pump.disable();
+  
+  unsigned int time = TIME_FOR_MOTOR * portions.getCount();
+  timer.setTimeout(time, motorWork);
+  motor.enable();
+}
+
+void heatFirstPortion() {
+  heater.disable();
+}
+
+unsigned int countTimeForPrep() {
+  unsigned int timeForHeater = TIME_FOR_HEATER;
+  unsigned int timeForWater = TIME_FOR_PORTION * portions.getCount();
+  unsigned int timeForMotor = TIME_FOR_MOTOR * portions.getCount();
+  return timeForHeater + timeForWater + timeForMotor;
+}
+
+void doNothing(){}
+
+void preheat() {
+  heater.disable();
+  
+  unsigned int time = TIME_FOR_HEATER; 
+  timer.setTimeout(time, heatFirstPortion); 
+  heater.enable();
+  
+  time = TIME_FOR_PORTION;
+  timer.setTimeout(time, fillFirstPortion); 
+  pump.enable();
+}
+
+void cook() {
+  unsigned int time = countTimeForPrep();
+  prepTimerNum = timer.setTimeout(time, doNothing);
+  
+  time = TIME_FOR_HEATER;
+  timer.setTimeout(time, preheat); 
+  heater.enable();
+  
+  switchState(PREPARING);
+}
+
 void processButton(const uint8_t btnNumber) {
   ButtonState btnState = (btnNumber == 1) ? btn1.getState() : btn2.getState(); 
   GLCD.CursorTo(0, btnNumber);
@@ -406,6 +417,11 @@ void showPreparing() {
     GLCD.print(0);
   }
   GLCD.print(remainingTime);
+}
+
+void showDonePreparing() {
+  GLCD.CursorTo(4, 1);
+  GLCD.print("Done!");
 }
 
 void showInfo() {
@@ -535,6 +551,11 @@ void loop() {
   }
   previousLoopTime = currentTime;
   
+  /*if (currentTime - clearScreenTime > CLEAR_SCREEN_TIME) {
+    clearScreen = true;
+    clearScreenTime = currentTime;
+  }*/
+  
   if (clearScreen) {
     GLCD.ClearScreen();
     clearScreen = false;
@@ -569,6 +590,11 @@ void loop() {
     case PREPARING:
       GLCD.SelectFont(Arial_14);
       showPreparing();
+      break;
+    
+    case DONE_PREPARING:
+      GLCD.SelectFont(Arial_14);
+      showDonePreparing();
       break;
     
     case DAYS:

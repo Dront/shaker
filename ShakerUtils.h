@@ -1,4 +1,4 @@
-typedef enum {TIME, SET_TIME_1, SET_TIME_2, INFO, PORTIONS, HOT_WATER, PREPARING, DONE_PREPARING, LAST_PREP, DAYS, SET_DAYS} SystemState;
+typedef enum {TIME, SET_TIME_1, SET_TIME_2, INFO, PORTIONS, WRONG_TEMP, PREPARING, DONE_PREPARING, LAST_PREP, DAYS, SET_DAYS} SystemState;
 typedef enum {NOT_PRESSED, PRESSED, SHORT_PRESS, LONG_PRESS, SUPER_LONG_PRESS} ButtonState;
 typedef enum {NOT_ROTATED, ROTATED_RIGHT, ROTATED_LEFT} RotaterState;
 typedef enum {ENABLED, DISABLED} RelayState;
@@ -47,7 +47,7 @@ public:
 class Button{
 
 #define LONG_PRESS_DELAY 1000
-#define NEXT_PRESS_DELAY 300
+#define NEXT_PRESS_DELAY 100
 #define SUPER_LONG_PRESS_DELAY 10000
 
 private:
@@ -57,7 +57,7 @@ private:
   unsigned long prevPress;
 
 public:
-  Button(const int8_t p) {
+  Button(const uint8_t p) {
     pin = p;
     pinMode(pin, INPUT);
     prevPress = 0;
@@ -119,7 +119,7 @@ private:
 
 public:
 
-  Rotater(const int8_t a, const int8_t b){
+  Rotater(const uint8_t a, const uint8_t b){
     previousCode = getCode();
     
     pinA = a;
@@ -168,7 +168,7 @@ class Portion {
 #define MAX_PORTIONS 8
 #define MIN_PORTIONS 2
 #define STD_PORTIONS 3
-#define MILK_PER_PORTION 25;
+#define MILK_PER_PORTION 30;
 
 private:
   uint8_t count;
@@ -283,7 +283,7 @@ private:
 
 public:
 
-  DayCounter(const uint8_t d) {
+  DayCounter(const uint8_t d = 10) {
     if (checkCount(d)) {
       count = d;
     } else {
@@ -344,8 +344,6 @@ public:
   inline MotorState getState(){
     return state;
   }
-
-
 };
 
 

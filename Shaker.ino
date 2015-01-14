@@ -7,6 +7,7 @@
 #include <fonts/fixednums15x31.h>
 #include <fonts/fixednums8x16.h>
 #include <fonts/Arial14.h>
+#include <fonts/Arial_bold_14.h>
 
 #include "ShakerUtils.h"
 #include "SimpleTimer.h"
@@ -20,6 +21,9 @@ Relay pump(22);
 Magnet magnet(25);
 Motor motor(24);
 OneWire oneWire(26);
+
+#define MAX_WATER_TEMP 30
+#define MIN_WATER_TEMP 10
 DallasTemperature therm(&oneWire);
 
 FPSCounter fps;
@@ -28,22 +32,34 @@ uint8_t prepTimerNum = -1;
 SystemState sysState = TIME;
 
 #define TIME_FOR_MOTOR 1000
-#define TIME_FOR_HEATER 1500
-#define TIME_FOR_DONE_SCREEN 2000
-#define TIME_FOR_PORTION 3000
+#define TIME_FOR_HEATER 1800
+#define TIME_FOR_PORTION 3500
+
 Portion portions(3);
 DayCounter days(5);
-unsigned long prepTimer = millis();
-
+unsigned long prepTimer;
 
 #define LOOP_TIME 25
-unsigned long previousLoopTime = millis();
+unsigned long previousLoopTime;
 
-#define CLEAR_SCREEN_TIME 1000
-unsigned long clearScreenTime = millis();
+#define TIME_FOR_DONE_SCREEN 2000
+#define TIME_FOR_TEMP_SCREEN 2000
+
+#define CLEAR_SCREEN_TIME 2000
+unsigned long clearScreenTime;
 uint8_t clearScreen = false;
 
+//for setting time and expire date
+time_t tmp_time;
+DayCounter tmp_day;
+
 void setup() {
+  unsigned long curTime = millis();
+  
+  prepTimer = curTime;
+  previousLoopTime = curTime;
+  clearScreenTime = curTime;
+  
   attachInterrupt(4, button1Interrupt, CHANGE);
   attachInterrupt(3, button2Interrupt, CHANGE);
   attachInterrupt(0, encoderInterrupt, CHANGE);
@@ -84,11 +100,11 @@ void encoderInterrupt() {
           break;
           
         case SET_TIME_1:
-          adjustTime(3600);
+          tmp_time += 3600;
           break;
         
         case SET_TIME_2:
-          adjustTime(60);
+          tmp_time += 60;
           break; 
           
         case LAST_PREP:
@@ -100,7 +116,7 @@ void encoderInterrupt() {
           break;
           
         case SET_DAYS:
-          days++;
+          tmp_day++;
           enc.checked();
           break;
           
@@ -121,11 +137,11 @@ void encoderInterrupt() {
           break;
         
         case SET_TIME_1:
-          adjustTime(-3600);
+          tmp_time -= 3600;
           break;
         
         case SET_TIME_2:
-          adjustTime(-60);
+          tmp_time -= 60;
           break; 
         
         case DAYS:
@@ -137,7 +153,7 @@ void encoderInterrupt() {
           break;
         
         case SET_DAYS:
-          days--;
+          tmp_day--;
           enc.checked();
           break;
           
@@ -166,6 +182,7 @@ void button1Interrupt() {
           break;
           
         case SET_TIME_2:
+          setTime(tmp_time);
           switchState(TIME);
           break;
           
@@ -182,6 +199,7 @@ void button1Interrupt() {
           break;
          
         case SET_DAYS:
+          days = tmp_day;
           switchState(DAYS);
           break;
         
@@ -193,6 +211,7 @@ void button1Interrupt() {
     case LONG_PRESS:
       switch(sysState){
         case TIME:
+          tmp_time = now();
           switchState(SET_TIME_1);
           break;
         
@@ -234,6 +253,11 @@ void button2Interrupt() {
           switchState(TIME);
           break;
           
+        case PREPARING:
+          stopPreparing();
+          switchState(TIME);
+          break;
+          
         case SET_DAYS:
           switchState(DAYS);
           break;
@@ -270,6 +294,24 @@ void processEncoder() {
     default:
       break;
   }
+}
+
+void stopPreparing() {
+  for (int i = 0; i < timer.MAX_TIMERS; ++i) {
+    if (timer.isEnabled(i)) {
+      timer.deleteTimer(i);
+    }
+  }
+  
+  heater.disable();
+  pump.disable();
+  //ждать пока магнит тикнет
+  motor.disable();
+}
+
+float getTemperature() {
+  therm.requestTemperatures();
+  return therm.getTempCByIndex(0);
 }
 
 void toTimeScreen(){
@@ -347,18 +389,24 @@ void preheat() {
 }
 
 void cook() {
-  therm.requestTemperatures();
-  float temperature = therm.getTempCByIndex(0);
-  Serial.println(temperature);
+  float temp = getTemperature();
+  Serial.println(temp);
   
-  unsigned int time = countTimeForPrep();
-  prepTimerNum = timer.setTimeout(time, doNothing);
+  if (temp < MAX_WATER_TEMP && temp > MIN_WATER_TEMP) {
+    unsigned int time = countTimeForPrep();
+    prepTimerNum = timer.setTimeout(time, doNothing);
+    
+    time = TIME_FOR_HEATER;
+    timer.setTimeout(time, preheat); 
+    heater.enable();
+    
+    switchState(PREPARING);
+  } else {
+    unsigned int time = TIME_FOR_TEMP_SCREEN;
+    timer.setTimeout(time, toTimeScreen);
+    switchState(WRONG_TEMP);
+  }
   
-  time = TIME_FOR_HEATER;
-  timer.setTimeout(time, preheat); 
-  heater.enable();
-  
-  switchState(PREPARING);
 }
 
 void processButton(const uint8_t btnNumber) {
@@ -387,19 +435,19 @@ void processButton(const uint8_t btnNumber) {
 }
 
 void showTime() {
-  GLCD.CursorTo(5, 1);
+  GLCD.CursorTo(2, 1);
   uint8_t h = hour();
   if (h < 10) {
     GLCD.print(0);
   }
-  GLCD.print(hour());
+  GLCD.print(h);
   GLCD.print(":");
   
   uint8_t m = minute();
   if (m < 10) {
     GLCD.print(0);
   }
-  GLCD.print(minute());
+  GLCD.print(m);
   
   static int count = 0;
   
@@ -415,6 +463,22 @@ void showPortions() {
   GLCD.CursorTo(3, 2);
   GLCD.print(portions.getCount());
   GLCD.print(" portions  ");
+}
+
+void showHotWater() {
+  GLCD.CursorTo(2, 1);
+  
+  int temp = (int)therm.getTempCByIndex(0);
+  if (temp > MAX_WATER_TEMP) {
+    GLCD.print("Water is too hot");
+  } else {
+    GLCD.print("Water is too cold");
+  }
+
+  GLCD.CursorTo(3, 2);
+  GLCD.print("Temp: ");
+  GLCD.print(temp);
+  GLCD.print(" C");
 }
 
 void showPreparing() {
@@ -457,7 +521,10 @@ void showDays() {
 }
 
 void showSetDays() {
-  uint8_t d = days.getCount();
+  
+  static bool clear = false;
+  
+  uint8_t d = tmp_day.getCount();
   GLCD.CursorTo(2, 1);
   GLCD.print("Choose days count: ");
   GLCD.CursorTo(6, 2);
@@ -465,14 +532,16 @@ void showSetDays() {
   if ((millis() / 500) % 2) {
     GLCD.print("");
     GLCD.print(d);
-  } else {
-    GLCD.print("         ");
+    clear = true;
+  } else if (clear) {
+    GLCD.ClearScreen();
+    clear = false;
   }
 }
 
 void showLastPrep() {
-  GLCD.CursorTo(1, 1);
-  GLCD.print("Time since feeding:   ");
+  GLCD.CursorTo(2, 1);
+  GLCD.print("Since feeding:   ");
   
   unsigned long diff = (millis() - prepTimer) / 1000;
   unsigned long hours = diff / 3600;
@@ -504,12 +573,13 @@ void showSetTime1() {
   
   static bool clear = false;
   
+  unsigned int h = hour(tmp_time);
   if ((millis() / 500) % 2) {
     GLCD.print("        ");
-    if (hour() < 10) {
+    if (h < 10) {
       GLCD.print(0);
     }
-    GLCD.print(hour());
+    GLCD.print(h);
     clear = true;
   } else {
     if (clear) {
@@ -518,12 +588,13 @@ void showSetTime1() {
     }
   }
   
+  unsigned int m = minute(tmp_time);
   GLCD.CursorTo(6, 1);
   GLCD.print(":");
-  if (minute() < 10) {
+  if (m < 10) {
     GLCD.print(0);
   }
-  GLCD.print(minute());
+  GLCD.print(m);
 }
 
 void showSetTime2() {
@@ -531,24 +602,24 @@ void showSetTime2() {
   
   static bool clear = false;
   
+  unsigned int h = hour(tmp_time);
   GLCD.print("        ");
-  if (hour() < 10) {
+  if (h < 10) {
     GLCD.print(0);
   }
-  GLCD.print(hour());
+  GLCD.print(h);
   GLCD.print(":");
   
+  unsigned int m = minute(tmp_time);
   if ((millis() / 500) % 2) {
-    if (minute() < 10) {
+    if (m < 10) {
       GLCD.print(0);
     }
-    GLCD.print(minute());
+    GLCD.print(m);
     clear = true;  
-  } else {
-    if (clear) {
-      GLCD.ClearScreen();
-      clear = false;
-    }
+  } else if (clear) {
+    GLCD.ClearScreen();
+    clear = false;
   }
 }
 
@@ -571,6 +642,7 @@ void loop() {
     clearScreen = false;
   }
   
+  GLCD.SelectFont(Arial_bold_14);
   switch (sysState) {
     case INFO:
       GLCD.SelectFont(System5x7);
@@ -578,47 +650,43 @@ void loop() {
       break;
       
     case TIME:
-      GLCD.SelectFont(Arial_14);
+      GLCD.SelectFont(fixednums15x31);
       showTime();
       break;
       
     case SET_TIME_1:
-      GLCD.SelectFont(Arial_14);
       showSetTime1();
       break;
     
     case SET_TIME_2:
-      GLCD.SelectFont(Arial_14);
       showSetTime2();
       break;
     
     case PORTIONS:
-      GLCD.SelectFont(Arial_14);
       showPortions();
+      break;
+    
+    case WRONG_TEMP:
+      showHotWater();
       break;
       
     case PREPARING:
-      GLCD.SelectFont(Arial_14);
       showPreparing();
       break;
     
     case DONE_PREPARING:
-      GLCD.SelectFont(Arial_14);
       showDonePreparing();
       break;
     
     case DAYS:
-      GLCD.SelectFont(Arial_14);
       showDays();
       break;
     
     case SET_DAYS:
-      GLCD.SelectFont(Arial_14);
       showSetDays();
       break;
       
     case LAST_PREP:
-      GLCD.SelectFont(Arial_14);
       showLastPrep();
       break;
     

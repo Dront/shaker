@@ -33,7 +33,7 @@ uint8_t prepTimerNum = -1;
 SystemState sysState = TIME;
 
 #define TIME_FOR_MOTOR 1000
-#define TIME_FOR_HEATER 1800
+#define TIME_FOR_HEATER 1500
 #define TIME_FOR_PORTION 3500
 
 Portion portions(3);
@@ -343,7 +343,7 @@ void toggleHeater() {
 }
 
 void motorWork() {
-  if (magnet.getCount() == portions.getCount() + 2) {
+  if (magnet.getCount() == portions.getCount()) {
     timer.deleteTimer(magnet.getTimerNum()); 
     motor.disable();
     
@@ -460,7 +460,7 @@ void showTime() {
   static int count = 0;
   
   if (!magnet.enabled()) {
-    Serial.println(count++);
+  //  Serial.println(count++);
   }
 }
 
@@ -635,8 +635,8 @@ void showSetTime2() {
 }
 
 void loop() {
-  timer.run();
   magnet.update();
+  timer.run();
   
   unsigned long currentTime = millis();
   if (currentTime - previousLoopTime < LOOP_TIME) {

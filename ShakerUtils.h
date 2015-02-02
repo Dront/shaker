@@ -3,6 +3,7 @@ typedef enum {NOT_PRESSED, PRESSED, SHORT_PRESS, LONG_PRESS, SUPER_LONG_PRESS} B
 typedef enum {NOT_ROTATED, ROTATED_RIGHT, ROTATED_LEFT} RotaterState;
 typedef enum {ENABLED, DISABLED} RelayState;
 typedef enum {MOTOR_ENABLED, MOTOR_DISABLED} MotorState;
+typedef enum {MAGNET_ENABLED, MAGNET_DISABLED} MagnetState;
 
 //*******************************************************************************
 class FPSCounter {
@@ -352,18 +353,24 @@ public:
 //*******************************************************************************
 class Magnet {
   
-#define MAGNET_DELAY 300
+#define MAGNET_DELAY 100
   
   private:
     uint8_t pin;
     unsigned long prevTick;
     unsigned tickCount;
     uint8_t timerNum;
+    MagnetState state;
     
   public:
     Magnet (const uint8_t p) {
     	pin = p;
     	pinMode(pin, INPUT);
+        if (digitalRead(pin) == LOW) {
+          state = MAGNET_ENABLED;
+        } else {
+          state = MAGNET_DISABLED;
+        }
         prevTick = 0;
         tickCount = 0;
     }
@@ -374,9 +381,20 @@ class Magnet {
     
     inline unsigned update() {
         unsigned long time = millis();
-        if (digitalRead(pin) == HIGH && (time - prevTick > MAGNET_DELAY)) {
-            tickCount++;
-            prevTick = time;
+        //en
+        if (digitalRead(pin) == LOW) {
+            if (state == MAGNET_DISABLED && (time - prevTick) > MAGNET_DELAY) {
+              tickCount++;
+              Serial.print("tick! ");
+              Serial.println(tickCount);
+              state = MAGNET_ENABLED;  
+            }
+        //dis    
+        } else {
+            if (state == MAGNET_ENABLED) {
+              state = MAGNET_DISABLED;
+              prevTick = time;  
+            }
         }
         return tickCount;
     }
@@ -387,6 +405,8 @@ class Magnet {
     
     inline void zeroCount() {
       tickCount = 0;
+      state = MAGNET_DISABLED;
+      prevTick = millis() - MAGNET_DELAY;
     }
     
     inline void setTimerNum(const uint8_t num) {

@@ -22,7 +22,7 @@ Motor motor(24);
 Magnet magnet(25);
 OneWire oneWire(26);
 
-#define MAGNET_CHECK_DELAY 50
+#define MAGNET_CHECK_DELAY 10
 #define MAX_WATER_TEMP 30
 #define MIN_WATER_TEMP 10
 DallasTemperature therm(&oneWire);
@@ -33,8 +33,8 @@ uint8_t prepTimerNum = -1;
 SystemState sysState = TIME;
 
 #define TIME_FOR_MOTOR 1000
-#define TIME_FOR_HEATER 1500
-#define TIME_FOR_PORTION 3500
+#define TIME_FOR_HEATER 1200
+#define TIME_FOR_PORTION 2900
 
 Portion portions(3);
 DayCounter days(5);
@@ -357,6 +357,8 @@ void motorWork() {
     heater.setTimerNum(timerNum);
     heater.enable();
   }
+  
+  motor.toggle();
 }
 
 void fillFirstPortion() {
@@ -392,7 +394,7 @@ unsigned int countTimeForPrep() {
   unsigned int timeForHeater = TIME_FOR_HEATER;
   unsigned int timeForWater = TIME_FOR_PORTION * portions.getCount();
   unsigned int timeForMotor = TIME_FOR_MOTOR * portions.getCount();
-  return timeForHeater + timeForWater + timeForMotor;
+  return timeForHeater + timeForWater + timeForMotor + 1000;
 }
 
 void cook() {
@@ -465,9 +467,9 @@ void showTime() {
 }
 
 void showPortions() {
-  GLCD.CursorTo(4, 1);
-  GLCD.print(portions.getMilk());
-  GLCD.print(" ml.  ");
+  //GLCD.CursorTo(4, 1);
+  //GLCD.print(portions.getMilk());
+  //GLCD.print(" ml.  ");
   GLCD.CursorTo(3, 2);
   GLCD.print(portions.getCount());
   GLCD.print(" portions  ");

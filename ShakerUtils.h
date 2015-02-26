@@ -342,6 +342,14 @@ public:
     state = MOTOR_DISABLED;
   }
   
+  inline void toggle() {
+    if (state == MOTOR_ENABLED) {
+      disable();
+    } else {
+      enable();
+    }
+  }
+  
   inline MotorState getState(){
     return state;
   }

@@ -22,7 +22,7 @@ Motor motor(24);
 Magnet magnet(25);
 OneWire oneWire(26);
 
-#define MAGNET_CHECK_DELAY 10
+#define MAGNET_CHECK_DELAY 40
 #define MAX_WATER_TEMP 30
 #define MIN_WATER_TEMP 10
 DallasTemperature therm(&oneWire);
@@ -356,9 +356,11 @@ void motorWork() {
     uint8_t timerNum = timer.setTimer(time, toggleHeater, num);
     heater.setTimerNum(timerNum);
     heater.enable();
+  } else {
+    motor.toggle();
   }
   
-  motor.toggle();
+  
 }
 
 void fillFirstPortion() {
